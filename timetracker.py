@@ -25,6 +25,23 @@ if not os.path.exists(TIME_FILE):
     pd.DataFrame(columns=["Date", "Project", "Client", "Task", "Start", "End", "Hours", "Notes"]).to_csv(TIME_FILE, index=False)
 
 # -----------------------------
+# Load files
+# -----------------------------
+df_projects = pd.read_csv(PROJECT_FILE)
+df_clients = pd.read_csv(CLIENT_FILE)
+df_time = pd.read_csv(TIME_FILE)
+
+# -----------------------------
+# Fix missing columns (prevents KeyError)
+# -----------------------------
+required_columns = ["Date", "Project", "Client", "Task", "Start", "End", "Hours", "Notes"]
+for col in required_columns:
+    if col not in df_time.columns:
+        df_time[col] = ""
+
+df_time.to_csv(TIME_FILE, index=False)
+
+# -----------------------------
 # Sidebar - Client Management
 # -----------------------------
 st.sidebar.header("Client Management")
@@ -32,12 +49,10 @@ st.sidebar.header("Client Management")
 new_client = st.sidebar.text_input("Client Name")
 
 if st.sidebar.button("Add Client"):
-    df_clients = pd.read_csv(CLIENT_FILE)
-    df_clients.loc[len(df_clients)] = [new_client]
-    df_clients.to_csv(CLIENT_FILE, index=False)
-    st.sidebar.success("Client Added")
-
-df_clients = pd.read_csv(CLIENT_FILE)
+    if new_client != "":
+        df_clients.loc[len(df_clients)] = [new_client]
+        df_clients.to_csv(CLIENT_FILE, index=False)
+        st.sidebar.success("Client Added")
 
 if not df_clients.empty:
     delete_client = st.sidebar.selectbox("Delete Client", df_clients["Client"])
@@ -51,19 +66,16 @@ if not df_clients.empty:
 # -----------------------------
 st.sidebar.header("Project Management")
 
-df_clients = pd.read_csv(CLIENT_FILE)
-client_list = df_clients["Client"].tolist()
+client_list = df_clients["Client"].tolist() if not df_clients.empty else []
 
 new_project = st.sidebar.text_input("Project Name")
-selected_client = st.sidebar.selectbox("Select Client", client_list)
+selected_client = st.sidebar.selectbox("Select Client", client_list) if client_list else ""
 
 if st.sidebar.button("Add Project"):
-    df_projects = pd.read_csv(PROJECT_FILE)
-    df_projects.loc[len(df_projects)] = [new_project, selected_client]
-    df_projects.to_csv(PROJECT_FILE, index=False)
-    st.sidebar.success("Project Added")
-
-df_projects = pd.read_csv(PROJECT_FILE)
+    if new_project != "" and selected_client != "":
+        df_projects.loc[len(df_projects)] = [new_project, selected_client]
+        df_projects.to_csv(PROJECT_FILE, index=False)
+        st.sidebar.success("Project Added")
 
 if not df_projects.empty:
     delete_project = st.sidebar.selectbox("Delete Project", df_projects["Project Name"])
@@ -79,11 +91,12 @@ st.title("Time Tracker")
 
 df_projects = pd.read_csv(PROJECT_FILE)
 
-project_list = df_projects["Project Name"].tolist()
+project_list = df_projects["Project Name"].tolist() if not df_projects.empty else []
 project_client_map = dict(zip(df_projects["Project Name"], df_projects["Client"]))
 
 task = st.selectbox("Task", ["PV Design", "Simulation", "PR Calculation", "Meeting", "Emails", "Report", "Site Visit", "Coding"])
-project = st.selectbox("Project", project_list)
+
+project = st.selectbox("Project", project_list) if project_list else ""
 client = project_client_map.get(project, "")
 
 notes = st.text_input("Notes")
@@ -119,8 +132,11 @@ df_time = pd.read_csv(TIME_FILE)
 if not df_time.empty:
     col1, col2, col3 = st.columns(3)
 
-    filter_project = col1.selectbox("Filter by Project", ["All"] + list(df_time["Project"].unique()))
-    filter_client = col2.selectbox("Filter by Client", ["All"] + list(df_time["Client"].unique()))
+    project_options = ["All"] + list(df_time["Project"].dropna().unique())
+    client_options = ["All"] + list(df_time["Client"].dropna().unique())
+
+    filter_project = col1.selectbox("Filter by Project", project_options)
+    filter_client = col2.selectbox("Filter by Client", client_options)
     sort_by = col3.selectbox("Sort By", ["Date", "Project", "Client", "Hours"])
 
     if filter_project != "All":
@@ -133,12 +149,13 @@ if not df_time.empty:
 
     st.dataframe(df_time, use_container_width=True)
 
-    total_hours = df_time["Hours"].sum()
+    total_hours = pd.to_numeric(df_time["Hours"], errors="coerce").sum()
     st.subheader(f"Total Hours: {round(total_hours,2)}")
 
     # Earnings
     st.header("Earnings Calculator")
     rate = st.number_input("Hourly Rate (£)", value=30)
     st.write(f"Total Earnings: £ {round(total_hours * rate,2)}")
+
 else:
     st.info("No time logged yet")
