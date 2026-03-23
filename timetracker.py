@@ -10,6 +10,8 @@ PROJECT_FILE = "projects.csv"
 CLIENT_FILE = "clients.csv"
 TIME_FILE = "time_log.csv"
 
+columns_order = ["Date", "Project", "Client", "Task", "Start", "End", "Hours", "Notes"]
+
 # Create files if not exist
 if not os.path.exists(PROJECT_FILE):
     pd.DataFrame(columns=["Project Name", "Client"]).to_csv(PROJECT_FILE, index=False)
@@ -18,14 +20,22 @@ if not os.path.exists(CLIENT_FILE):
     pd.DataFrame(columns=["Client"]).to_csv(CLIENT_FILE, index=False)
 
 if not os.path.exists(TIME_FILE):
-    pd.DataFrame(columns=["Date", "Project", "Client", "Task", "Start", "End", "Hours", "Notes"]).to_csv(TIME_FILE, index=False)
+    pd.DataFrame(columns=columns_order).to_csv(TIME_FILE, index=False)
 
 # Load data
 df_projects = pd.read_csv(PROJECT_FILE)
 df_clients = pd.read_csv(CLIENT_FILE)
 df_time = pd.read_csv(TIME_FILE)
 
-# Sidebar - Client Management
+# Ensure correct columns
+for col in columns_order:
+    if col not in df_time.columns:
+        df_time[col] = ""
+
+df_time = df_time[columns_order]
+df_time.to_csv(TIME_FILE, index=False)
+
+# ---------------- Sidebar ----------------
 st.sidebar.header("Client Management")
 new_client = st.sidebar.text_input("Client Name")
 if st.sidebar.button("Add Client"):
@@ -41,7 +51,6 @@ if not df_clients.empty:
         df_clients.to_csv(CLIENT_FILE, index=False)
         st.sidebar.warning("Client Deleted")
 
-# Sidebar - Project Management
 st.sidebar.header("Project Management")
 client_list = df_clients["Client"].tolist() if not df_clients.empty else []
 new_project = st.sidebar.text_input("Project Name")
@@ -60,7 +69,7 @@ if not df_projects.empty:
         df_projects.to_csv(PROJECT_FILE, index=False)
         st.sidebar.warning("Project Deleted")
 
-# Main Page
+# ---------------- Main ----------------
 st.title("Time Tracker")
 
 df_projects = pd.read_csv(PROJECT_FILE)
@@ -82,19 +91,22 @@ if col2.button("Stop Timer"):
     if "start_time" in st.session_state:
         end_time = datetime.now()
         start_time = st.session_state.start_time
-        duration = (end_time - start_time).seconds / 3600
+        duration = (end_time - start_time).total_seconds() / 3600
 
         new_entry = pd.DataFrame([[datetime.today().date(), project, client, task, start_time, end_time, duration, notes]],
-                                 columns=["Date", "Project", "Client", "Task", "Start", "End", "Hours", "Notes"])
+                                 columns=columns_order)
 
+        new_entry = new_entry[columns_order]
         new_entry.to_csv(TIME_FILE, mode='a', header=False, index=False)
         st.success(f"Time Logged: {round(duration,2)} hours")
     else:
         st.error("Start the timer first")
 
-# Time Log Table
+# ---------------- Time Log ----------------
 st.header("Time Log")
+
 df_time = pd.read_csv(TIME_FILE)
+df_time = df_time[columns_order]
 
 if not df_time.empty:
     col1, col2, col3 = st.columns(3)
@@ -111,7 +123,7 @@ if not df_time.empty:
         df_time = df_time[df_time["Client"] == filter_client]
 
     df_time = df_time.sort_values(sort_by)
-    st.dataframe(df_time, use_container_width=True)
+    st.dataframe(df_time, use_container_width=True, height=400)
 
     total_hours = pd.to_numeric(df_time["Hours"], errors="coerce").sum()
     st.subheader(f"Total Hours: {round(total_hours,2)}")
@@ -119,13 +131,13 @@ if not df_time.empty:
     rate = st.number_input("Hourly Rate (£)", value=30)
     st.write(f"Total Earnings: £ {round(total_hours * rate,2)}")
 
-# Edit/Delete Entry
+# ---------------- Edit/Delete ----------------
 st.header("Edit / Delete Entry")
 
 df_time = pd.read_csv(TIME_FILE)
+df_time["Row ID"] = df_time.index
 
 if not df_time.empty:
-    df_time["Row ID"] = df_time.index
     selected_row = st.selectbox("Select Entry", df_time["Row ID"])
     row_data = df_time[df_time["Row ID"] == selected_row].iloc[0]
 
@@ -168,7 +180,7 @@ if not df_time.empty:
         df_time.to_csv(TIME_FILE, index=False)
         st.warning("Entry Deleted")
 
-# Dashboard
+# ---------------- Dashboard ----------------
 st.header("Dashboard")
 
 df_time = pd.read_csv(TIME_FILE)
@@ -201,7 +213,7 @@ if not df_time.empty:
     fig5 = px.bar(monthly, x="Month", y="Hours", title="Monthly Hours")
     st.plotly_chart(fig5, use_container_width=True)
 
-# Export
+# ---------------- Export ----------------
 st.header("Export Report")
 if st.button("Export to Excel"):
     df_time.to_excel("Time_Report.xlsx", index=False)
